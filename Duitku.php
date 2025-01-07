@@ -60,6 +60,12 @@ class Duitku extends Gateway
                 'type'        => 'text',
                 'required'    => true,
             ],
+            [
+                'name'         => 'environment',
+                'friendlyName' => 'Environment (sandbox/production)',
+                'type'        => 'text',
+                'required'    => true,
+            ],
         ];
     }
 
@@ -73,20 +79,23 @@ class Duitku extends Gateway
      */
     public function pay($total, $products, $orderId)
     {
+        $environment = ExtensionHelper::getConfig('Duitku', 'environment');
         $url = 'https://sandbox.duitku.com/webapi/api/merchant/v2/inquiry';
+        if ($environment === 'production') {
+            $url = 'https://passport.duitku.com/webapi/api/merchant/v2/inquiry';
+        }
+
         $merchantCode = ExtensionHelper::getConfig('Duitku', 'merchant_code');
         $apiKey = ExtensionHelper::getConfig('Duitku', 'api_key');
         $callbackUrl = ExtensionHelper::getConfig('Duitku', 'callback_url');
         $returnUrl = route('clients.invoice.show', $orderId);
         $paymentMethod = ExtensionHelper::getConfig('Duitku', 'payment_method');
 
-        $orderItems = array_map(function($product) {
-            return [
-                'name' => $product->name,
-                'price' => $product->price,
-                'quantity' => $product->quantity,
-            ];
-        }, $products);
+        $description = 'Products: ';
+        foreach ($products as $product) {
+            $description .= $product->name . ' x' . $product->quantity . ', ';
+        }
+        $description = rtrim($description, ', '); // Menghapus koma terakhir
 
         $signature = md5($merchantCode . $orderId . $total . $apiKey);
 
@@ -94,7 +103,7 @@ class Duitku extends Gateway
             'merchantCode' => $merchantCode,
             'paymentAmount' => $total,
             'merchantOrderId' => $orderId,
-            'productDetails' => json_encode($orderItems),
+            'productDetails' => $description,
             'additionalParam' => '',
             'merchantUserInfo' => auth()->user()->email,
             'email' => auth()->user()->email,
